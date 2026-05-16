@@ -34,6 +34,7 @@
 #include <mbgl/util/image.hpp>
 
 #include <mbgl/util/logging.hpp>
+#include <mbgl/util/projection.hpp>
 #include <mbgl/util/range.hpp>
 #include <mbgl/util/tileset.hpp>
 #include <mbgl/util/timer.hpp>
@@ -46,8 +47,13 @@
 #include <mbgl/text/glyph_manager.hpp>
 #include <mbgl/gfx/dynamic_texture_atlas.hpp>
 
+#include <array>
+#include <cmath>
 #include <cstdint>
+#include <map>
 #include <optional>
+#include <set>
+#include <tuple>
 #include <gmock/gmock.h>
 
 using namespace mbgl;
@@ -101,6 +107,74 @@ public:
 
     void end() { loop.stop(); }
 };
+
+namespace {
+
+using DEMTileKey = std::tuple<int8_t, int32_t, int32_t>;
+
+std::vector<Immutable<LayerProperties>> makeHillshadeLayers() {
+    HillshadeLayer layer("id", "source");
+    return {makeMutable<HillshadeLayerProperties>(staticImmutableCast<HillshadeLayer::Impl>(layer.baseImpl))};
+}
+
+void setMapboxDEMValue(PremultipliedImage& image, uint32_t x, uint32_t y, double elevation) {
+    const auto encoded = static_cast<uint32_t>(std::lround((elevation + 10000.0) * 10.0));
+    const auto offset = (y * image.size.width + x) * 4;
+    image.data[offset + 0] = static_cast<uint8_t>((encoded >> 16) & 0xFF);
+    image.data[offset + 1] = static_cast<uint8_t>((encoded >> 8) & 0xFF);
+    image.data[offset + 2] = static_cast<uint8_t>(encoded & 0xFF);
+    image.data[offset + 3] = 255;
+}
+
+std::string makeMapboxDEMTile(const std::array<std::array<double, 2>, 2>& elevations) {
+    PremultipliedImage image({2, 2});
+    for (uint32_t y = 0; y < 2; ++y) {
+        for (uint32_t x = 0; x < 2; ++x) {
+            setMapboxDEMValue(image, x, y, elevations[y][x]);
+        }
+    }
+    return encodePNG(image);
+}
+
+LatLng latLngForTileCoordinate(uint8_t z, double x, double y) {
+    return Projection::unproject({x * util::tileSize_D, y * util::tileSize_D},
+                                 std::pow(2.0, static_cast<double>(z)),
+                                 LatLng::Unwrapped);
+}
+
+bool containsAll(const std::set<OverscaledTileID>& seen, const std::set<OverscaledTileID>& expected) {
+    for (const auto& tileID : expected) {
+        if (!seen.contains(tileID)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+Response makeDEMResponse(const Resource& resource, const std::map<DEMTileKey, std::string>& tiles) {
+    Response response;
+    if (!resource.tileData) {
+        ADD_FAILURE() << "Expected tile resource";
+        response.noContent = true;
+        return response;
+    }
+
+    const auto key = DEMTileKey{
+        resource.tileData->z,
+        static_cast<int32_t>(resource.tileData->x),
+        static_cast<int32_t>(resource.tileData->y),
+    };
+    const auto it = tiles.find(key);
+    if (it == tiles.end()) {
+        response.noContent = true;
+        return response;
+    }
+
+    response.data = std::make_unique<std::string>(it->second);
+    return response;
+}
+
+} // namespace
 
 TEST(Source, LoadingFail) {
     SourceTest test;
@@ -218,6 +292,239 @@ TEST(Source, RasterDEMTileEmpty) {
     renderSource->update(source.baseImpl, layers, true, true, test.tileParameters());
 
     test.run();
+}
+
+TEST(Source, RasterDEMQueryElevationInterpolatesSingleTile) {
+    SourceTest test;
+
+    test.fileSource->tileResponse = [&](const Resource& resource) {
+        return makeDEMResponse(resource, {{DEMTileKey{0, 0, 0}, makeMapboxDEMTile({{{10.0, 20.0}, {30.0, 40.0}}})}});
+    };
+
+    auto layers = makeHillshadeLayers();
+
+    RasterDEMSource source("source", Tileset{{"tiles"}, {0, 22}, "none"}, 512);
+    source.loadDescription(*test.fileSource);
+
+    auto renderSource = RenderSource::create(source.baseImpl, test.threadPool);
+    auto* demRenderSource = static_cast<RenderRasterDEMSource*>(renderSource.get());
+    renderSource->setObserver(&test.renderSourceObserver);
+
+    std::set<OverscaledTileID> seen;
+    const std::set<OverscaledTileID> expected{{OverscaledTileID(0, 0, 0)}};
+
+    test.renderSourceObserver.tileChanged = [&](RenderSource&, const OverscaledTileID& tileID) {
+        seen.insert(tileID);
+        if (containsAll(seen, expected)) {
+            test.end();
+        }
+    };
+
+    test.renderSourceObserver.tileError = [&](RenderSource&, const OverscaledTileID&, std::exception_ptr error) {
+        FAIL() << util::toString(error);
+    };
+
+    renderSource->update(source.baseImpl, layers, true, true, test.tileParameters());
+    test.run();
+
+    const auto elevation = demRenderSource->queryElevation(latLngForTileCoordinate(0, 0.5, 0.5));
+    ASSERT_TRUE(elevation);
+    EXPECT_NEAR(*elevation, 25.0, 1e-6);
+}
+
+TEST(Source, RasterDEMQueryElevationUsesNeighborBackfillAtSharedCorner) {
+    SourceTest test;
+
+    test.transformState.setLatLngZoom(LatLng(), 1.0);
+
+    test.fileSource->tileResponse = [&](const Resource& resource) {
+        return makeDEMResponse(resource,
+                               {{DEMTileKey{1, 0, 0}, makeMapboxDEMTile({{{10.0, 20.0}, {30.0, 40.0}}})},
+                                {DEMTileKey{1, 1, 0}, makeMapboxDEMTile({{{100.0, 110.0}, {140.0, 150.0}}})},
+                                {DEMTileKey{1, 0, 1}, makeMapboxDEMTile({{{200.0, 240.0}, {250.0, 260.0}}})},
+                                {DEMTileKey{1, 1, 1}, makeMapboxDEMTile({{{340.0, 350.0}, {360.0, 370.0}}})}});
+    };
+
+    auto layers = makeHillshadeLayers();
+
+    RasterDEMSource source("source", Tileset{{"tiles"}, {0, 22}, "none"}, 512);
+    source.loadDescription(*test.fileSource);
+
+    auto renderSource = RenderSource::create(source.baseImpl, test.threadPool);
+    auto* demRenderSource = static_cast<RenderRasterDEMSource*>(renderSource.get());
+    renderSource->setObserver(&test.renderSourceObserver);
+
+    std::set<OverscaledTileID> seen;
+    const std::set<OverscaledTileID> expected{
+        OverscaledTileID(1, 0, 1, 0, 0),
+        OverscaledTileID(1, 0, 1, 1, 0),
+        OverscaledTileID(1, 0, 1, 0, 1),
+        OverscaledTileID(1, 0, 1, 1, 1),
+    };
+
+    test.renderSourceObserver.tileChanged = [&](RenderSource&, const OverscaledTileID& tileID) {
+        seen.insert(tileID);
+        if (containsAll(seen, expected)) {
+            test.end();
+        }
+    };
+
+    test.renderSourceObserver.tileError = [&](RenderSource&, const OverscaledTileID&, std::exception_ptr error) {
+        FAIL() << util::toString(error);
+    };
+
+    renderSource->update(source.baseImpl, layers, true, true, test.tileParameters());
+    test.run();
+
+    const auto elevation = demRenderSource->queryElevation(latLngForTileCoordinate(1, 1.0, 1.0));
+    ASSERT_TRUE(elevation);
+    EXPECT_NEAR(*elevation, 190.0, 1e-6);
+}
+
+TEST(Source, RasterDEMQueryElevationPrefersHigherCanonicalZoom) {
+    SourceTest test;
+
+    test.transformState.setLatLngZoom(LatLng(), 1.0);
+
+    test.fileSource->tileResponse = [&](const Resource& resource) {
+        return makeDEMResponse(resource,
+                               {{DEMTileKey{0, 0, 0}, makeMapboxDEMTile({{{10.0, 10.0}, {10.0, 10.0}}})},
+                                {DEMTileKey{1, 0, 0}, makeMapboxDEMTile({{{20.0, 20.0}, {20.0, 20.0}}})},
+                                {DEMTileKey{1, 1, 0}, makeMapboxDEMTile({{{90.0, 90.0}, {90.0, 90.0}}})},
+                                {DEMTileKey{1, 0, 1}, makeMapboxDEMTile({{{30.0, 30.0}, {30.0, 30.0}}})},
+                                {DEMTileKey{1, 1, 1}, makeMapboxDEMTile({{{40.0, 40.0}, {40.0, 40.0}}})}});
+    };
+
+    auto layers = makeHillshadeLayers();
+
+    RasterDEMSource source("source", Tileset{{"tiles"}, {0, 22}, "none"}, 512);
+    source.setPrefetchZoomDelta(1);
+    source.loadDescription(*test.fileSource);
+
+    auto renderSource = RenderSource::create(source.baseImpl, test.threadPool);
+    auto* demRenderSource = static_cast<RenderRasterDEMSource*>(renderSource.get());
+    renderSource->setObserver(&test.renderSourceObserver);
+
+    std::set<OverscaledTileID> seen;
+    const std::set<OverscaledTileID> expected{
+        OverscaledTileID(0, 0, 0),
+        OverscaledTileID(1, 0, 1, 0, 0),
+        OverscaledTileID(1, 0, 1, 1, 0),
+        OverscaledTileID(1, 0, 1, 0, 1),
+        OverscaledTileID(1, 0, 1, 1, 1),
+    };
+
+    test.renderSourceObserver.tileChanged = [&](RenderSource&, const OverscaledTileID& tileID) {
+        seen.insert(tileID);
+        if (containsAll(seen, expected)) {
+            test.end();
+        }
+    };
+
+    test.renderSourceObserver.tileError = [&](RenderSource&, const OverscaledTileID&, std::exception_ptr error) {
+        FAIL() << util::toString(error);
+    };
+
+    renderSource->update(source.baseImpl, layers, true, true, test.tileParameters());
+    test.run();
+
+    const auto elevation = demRenderSource->queryElevation(latLngForTileCoordinate(1, 1.5, 0.5));
+    ASSERT_TRUE(elevation);
+    EXPECT_NEAR(*elevation, 90.0, 1e-6);
+}
+
+TEST(Source, RasterDEMQueryElevationFallsBackToLoadedLowerZoom) {
+    SourceTest test;
+
+    test.transformState.setLatLngZoom(LatLng(), 1.0);
+
+    test.fileSource->tileResponse = [&](const Resource& resource) {
+        return makeDEMResponse(resource,
+                               {{DEMTileKey{0, 0, 0}, makeMapboxDEMTile({{{10.0, 10.0}, {10.0, 10.0}}})},
+                                {DEMTileKey{1, 0, 0}, makeMapboxDEMTile({{{20.0, 20.0}, {20.0, 20.0}}})},
+                                {DEMTileKey{1, 0, 1}, makeMapboxDEMTile({{{30.0, 30.0}, {30.0, 30.0}}})},
+                                {DEMTileKey{1, 1, 1}, makeMapboxDEMTile({{{40.0, 40.0}, {40.0, 40.0}}})}});
+    };
+
+    auto layers = makeHillshadeLayers();
+
+    RasterDEMSource source("source", Tileset{{"tiles"}, {0, 22}, "none"}, 512);
+    source.setPrefetchZoomDelta(1);
+    source.loadDescription(*test.fileSource);
+
+    auto renderSource = RenderSource::create(source.baseImpl, test.threadPool);
+    auto* demRenderSource = static_cast<RenderRasterDEMSource*>(renderSource.get());
+    renderSource->setObserver(&test.renderSourceObserver);
+
+    std::set<OverscaledTileID> seen;
+    const std::set<OverscaledTileID> expected{
+        OverscaledTileID(0, 0, 0),
+        OverscaledTileID(1, 0, 1, 0, 0),
+        OverscaledTileID(1, 0, 1, 1, 0),
+        OverscaledTileID(1, 0, 1, 0, 1),
+        OverscaledTileID(1, 0, 1, 1, 1),
+    };
+
+    test.renderSourceObserver.tileChanged = [&](RenderSource&, const OverscaledTileID& tileID) {
+        seen.insert(tileID);
+        if (containsAll(seen, expected)) {
+            test.end();
+        }
+    };
+
+    test.renderSourceObserver.tileError = [&](RenderSource&, const OverscaledTileID&, std::exception_ptr error) {
+        FAIL() << util::toString(error);
+    };
+
+    renderSource->update(source.baseImpl, layers, true, true, test.tileParameters());
+    test.run();
+
+    const auto elevation = demRenderSource->queryElevation(latLngForTileCoordinate(1, 1.5, 0.5));
+    ASSERT_TRUE(elevation);
+    EXPECT_NEAR(*elevation, 10.0, 1e-6);
+}
+
+TEST(Source, RasterDEMQueryElevationReturnsNulloptWhenDisabledAndSupportsWrappedWorlds) {
+    SourceTest test;
+
+    test.transformState.setLatLngZoom(LatLng{0.0, 360.0, LatLng::Unwrapped}, 0.0);
+
+    test.fileSource->tileResponse = [&](const Resource& resource) {
+        return makeDEMResponse(resource, {{DEMTileKey{0, 0, 0}, makeMapboxDEMTile({{{77.0, 77.0}, {77.0, 77.0}}})}});
+    };
+
+    auto layers = makeHillshadeLayers();
+
+    RasterDEMSource source("source", Tileset{{"tiles"}, {0, 22}, "none"}, 512);
+    source.loadDescription(*test.fileSource);
+
+    auto renderSource = RenderSource::create(source.baseImpl, test.threadPool);
+    auto* demRenderSource = static_cast<RenderRasterDEMSource*>(renderSource.get());
+    renderSource->setObserver(&test.renderSourceObserver);
+
+    std::set<OverscaledTileID> seen;
+    const std::set<OverscaledTileID> expected{{OverscaledTileID(0, 1, 0, 0, 0)}};
+
+    test.renderSourceObserver.tileChanged = [&](RenderSource&, const OverscaledTileID& tileID) {
+        seen.insert(tileID);
+        if (containsAll(seen, expected)) {
+            test.end();
+        }
+    };
+
+    test.renderSourceObserver.tileError = [&](RenderSource&, const OverscaledTileID&, std::exception_ptr error) {
+        FAIL() << util::toString(error);
+    };
+
+    renderSource->update(source.baseImpl, layers, true, true, test.tileParameters());
+    test.run();
+
+    const auto wrappedElevation = demRenderSource->queryElevation(latLngForTileCoordinate(0, 1.5, 0.5));
+    ASSERT_TRUE(wrappedElevation);
+    EXPECT_NEAR(*wrappedElevation, 77.0, 1e-6);
+
+    renderSource->update(source.baseImpl, layers, false, false, test.tileParameters());
+    EXPECT_FALSE(demRenderSource->queryElevation(latLngForTileCoordinate(0, 1.5, 0.5)).has_value());
 }
 
 TEST(Source, VectorTileEmpty) {

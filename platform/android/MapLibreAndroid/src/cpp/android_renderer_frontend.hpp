@@ -8,8 +8,9 @@
 
 #include <functional>
 #include <memory>
-#include <vector>
+#include <optional>
 #include <string>
+#include <vector>
 #include <mbgl/util/geojson.hpp>
 
 #include "map_renderer.hpp"
@@ -52,6 +53,7 @@ public:
     std::vector<Feature> queryRenderedFeatures(const ScreenCoordinate&, const RenderedQueryOptions&) const;
     std::vector<Feature> queryRenderedFeatures(const ScreenBox&, const RenderedQueryOptions&) const;
     std::vector<Feature> querySourceFeatures(const std::string& sourceID, const SourceQueryOptions&) const;
+    std::optional<double> queryRasterDEMElevation(const std::string& sourceID, const mbgl::LatLng&) const;
     AnnotationIDs queryPointAnnotations(const ScreenBox& box, const std::chrono::milliseconds& timeout) const;
     AnnotationIDs queryShapeAnnotations(const ScreenBox& box, const std::chrono::milliseconds& timeout) const;
 

@@ -168,6 +168,12 @@ std::vector<Feature> AndroidRendererFrontend::querySourceFeatures(const std::str
     return mapRenderer.actor().ask(&Renderer::querySourceFeatures, sourceID, options).get();
 }
 
+std::optional<double> AndroidRendererFrontend::queryRasterDEMElevation(const std::string& sourceID,
+                                                                       const mbgl::LatLng& latLng) const {
+    // Waits for the result from the orchestration thread and returns
+    return mapRenderer.actor().ask(&Renderer::queryRasterDEMElevation, sourceID, latLng).get();
+}
+
 std::vector<Feature> AndroidRendererFrontend::queryRenderedFeatures(const ScreenBox& box,
                                                                     const RenderedQueryOptions& options) const {
     // Select the right overloaded method

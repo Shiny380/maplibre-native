@@ -102,6 +102,10 @@ std::vector<Feature> Renderer::querySourceFeatures(const std::string& sourceID,
     return impl->orchestrator.querySourceFeatures(sourceID, options);
 }
 
+std::optional<double> Renderer::queryRasterDEMElevation(const std::string& sourceID, const LatLng& latLng) const {
+    return impl->orchestrator.queryRasterDEMElevation(sourceID, latLng);
+}
+
 FeatureExtensionValue Renderer::queryFeatureExtensions(const std::string& sourceID,
                                                        const Feature& feature,
                                                        const std::string& extension,

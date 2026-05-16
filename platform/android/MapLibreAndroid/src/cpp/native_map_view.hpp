@@ -258,6 +258,8 @@ public:
         const jni::Array<jni::String>&,
         const jni::Array<jni::Object<>>& jfilter);
 
+    jni::Local<jni::Double> queryRasterDEMElevation(JNIEnv&, const jni::String&, jni::jdouble, jni::jdouble);
+
     jni::Local<jni::Object<Light>> getLight(JNIEnv&);
 
     jni::Local<jni::Array<jni::Object<Layer>>> getLayers(JNIEnv&);

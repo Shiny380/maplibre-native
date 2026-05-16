@@ -190,6 +190,9 @@ interface NativeMap {
                                       @Nullable String[] layerIds,
                                       @Nullable Expression filter);
 
+  @Nullable
+  Double queryRasterDEMElevation(@NonNull String sourceId, @NonNull LatLng latLng);
+
   //
   // Projection API
   //

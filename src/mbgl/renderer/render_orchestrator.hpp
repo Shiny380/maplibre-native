@@ -70,6 +70,7 @@ public:
 
     std::vector<Feature> queryRenderedFeatures(const ScreenLineString&, const RenderedQueryOptions&) const;
     std::vector<Feature> querySourceFeatures(const std::string& sourceID, const SourceQueryOptions&) const;
+    std::optional<double> queryRasterDEMElevation(const std::string& sourceID, const LatLng&) const;
     std::vector<Feature> queryShapeAnnotations(const ScreenLineString&) const;
 
     FeatureExtensionValue queryFeatureExtensions(const std::string& sourceID,

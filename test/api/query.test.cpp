@@ -139,6 +139,14 @@ TEST(Query, QuerySourceFeatures) {
     EXPECT_EQ(features1.size(), 1u);
 }
 
+TEST(Query, QueryRasterDEMElevationMissingOrWrongType) {
+    QueryTest test;
+
+    EXPECT_FALSE(test.frontend.getRenderer()->queryRasterDEMElevation("missing", LatLng{}).has_value());
+    EXPECT_FALSE(test.frontend.getRenderer()->queryRasterDEMElevation("source3", LatLng{}).has_value());
+    EXPECT_FALSE(test.frontend.getRenderer()->queryRasterDEMElevation("source6", LatLng{}).has_value());
+}
+
 TEST(Query, QuerySourceFeatureStates) {
     QueryTest test;
 

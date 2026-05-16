@@ -1013,6 +1013,21 @@ jni::Local<jni::Array<jni::Object<geojson::Feature>>> NativeMapView::queryRender
     return Feature::convert(env, rendererFrontend->queryRenderedFeatures(box, {layers, toFilter(env, jfilter)}));
 }
 
+jni::Local<jni::Double> NativeMapView::queryRasterDEMElevation(JNIEnv& env,
+                                                               const jni::String& sourceId,
+                                                               jni::jdouble latitude,
+                                                               jni::jdouble longitude) {
+    assert(rendererFrontend);
+
+    auto elevation =
+        rendererFrontend->queryRasterDEMElevation(jni::Make<std::string>(env, sourceId), mbgl::LatLng(latitude, longitude));
+    if (elevation) {
+        return jni::Box(env, jni::jdouble(*elevation));
+    }
+
+    return jni::Local<jni::Double>(env, nullptr);
+}
+
 jni::Local<jni::Object<Light>> NativeMapView::getLight(JNIEnv& env) {
     mbgl::style::Light* light = map->getStyle().getLight();
     if (light) {
@@ -1417,6 +1432,7 @@ void NativeMapView::registerNative(jni::JNIEnv& env) {
         METHOD(&NativeMapView::queryShapeAnnotations, "nativeQueryShapeAnnotations"),
         METHOD(&NativeMapView::queryRenderedFeaturesForPoint, "nativeQueryRenderedFeaturesForPoint"),
         METHOD(&NativeMapView::queryRenderedFeaturesForBox, "nativeQueryRenderedFeaturesForBox"),
+        METHOD(&NativeMapView::queryRasterDEMElevation, "nativeQueryRasterDEMElevation"),
         METHOD(&NativeMapView::getLight, "nativeGetLight"),
         METHOD(&NativeMapView::getLayers, "nativeGetLayers"),
         METHOD(&NativeMapView::getLayer, "nativeGetLayer"),

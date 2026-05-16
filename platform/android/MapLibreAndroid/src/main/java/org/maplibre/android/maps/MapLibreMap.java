@@ -2220,6 +2220,26 @@ public final class MapLibreMap {
   }
 
   /**
+   * Queries physical elevation in meters from currently retained, loaded tiles of named raster-dem source.
+   * <p>
+   * Returns null when query contract cannot be satisfied: source is missing, source is not raster-dem,
+   * source is disabled because no visible rendering layer retains it, tiles are not loaded enough, or
+   * no retained renderable DEM tile covers the requested coordinate.
+   * </p>
+   * <p>
+   * Returns null for lifecycle reasons if the map or underlying render surface has been destroyed.
+   * </p>
+   *
+   * @param sourceId raster-dem source identifier to query
+   * @param latLng   coordinate to query
+   * @return physical elevation in meters without terrain exaggeration, or null
+   */
+  @Nullable
+  public Double queryRasterDEMElevation(@NonNull String sourceId, @NonNull LatLng latLng) {
+    return nativeMapView.queryRasterDEMElevation(sourceId, latLng);
+  }
+
+  /**
    * Queries the map for rendered features.
    * <p>
    * Returns an empty list if either the map or underlying render surface has been destroyed.

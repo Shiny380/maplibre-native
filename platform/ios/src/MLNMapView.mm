@@ -6687,6 +6687,16 @@ static void *windowScreenContext = &windowScreenContext;
   return MLNFeaturesFromMBGLFeatures(features);
 }
 
+- (nullable NSNumber *)elevationAtCoordinate:(CLLocationCoordinate2D)coordinate
+           fromRasterDEMSourceWithIdentifier:(NSString *)sourceIdentifier {
+  MLNLogDebug(@"Querying elevationAtCoordinate: %@ fromRasterDEMSourceWithIdentifier: %@",
+              MLNStringFromCLLocationCoordinate2D(coordinate), sourceIdentifier);
+
+  const auto elevation = [self renderer]->queryRasterDEMElevation(
+      sourceIdentifier.UTF8String, MLNLatLngFromLocationCoordinate2D(coordinate));
+  return elevation ? @(*elevation) : nil;
+}
+
 // MARK: - Utility -
 
 - (void)animateWithDelay:(NSTimeInterval)delay animations:(void (^)(void))animations {
