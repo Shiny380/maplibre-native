@@ -35,7 +35,7 @@ public:
         renderPass.reset();
         colorTexture.reset();
 
-        backend.getContext().renderingStats().numFrameBuffers--;
+        //backend.getContext().renderingStats().numFrameBuffers--;
     }
 
     void bind() override {
