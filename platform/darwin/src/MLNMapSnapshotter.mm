@@ -10,6 +10,8 @@
 #import <mbgl/util/geo.hpp>
 #import <mbgl/util/string.hpp>
 
+#include <optional>
+
 #import "MLNAnnotationImage_Private.h"
 #import "MLNAttributionInfo_Private.h"
 #import "MLNGeometry_Private.h"
@@ -892,8 +894,9 @@ NSArray<MLNAttributionInfo *> *MLNAttributionInfosFromAttributions(
   }
 
   // Create the snapshotter
-  auto localFontFamilyName =
-      config.localFontFamilyName ? std::string(config.localFontFamilyName.UTF8String) : nullptr;
+  std::optional<std::string> localFontFamilyName =
+      config.localFontFamilyName ? std::make_optional(std::string(config.localFontFamilyName.UTF8String))
+                                 : std::nullopt;
   _delegateHost = std::make_unique<MLNMapSnapshotterDelegateHost>(self);
   _mbglMapSnapshotter = std::make_unique<mbgl::MapSnapshotter>(
       size, pixelRatio, resourceOptions, clientOptions, *_delegateHost, localFontFamilyName);
