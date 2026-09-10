@@ -1069,6 +1069,20 @@ of north, the map will automatically snap to exact north.
 @property (nonatomic) MLNCoordinateBounds maximumScreenBounds;
 
 /**
+ * Bounds to which camera target (center) is constrained.
+ *
+ * Map viewport may extend outside these bounds, unlike maximumScreenBounds.
+ * Setting this property replaces maximumScreenBounds and restores normal
+ * interactive constraints.
+ */
+@property (nonatomic) MLNCoordinateBounds cameraTargetBounds;
+
+/**
+ * Removes camera center bounds.
+ */
+- (void)resetCameraTargetBounds;
+
+/**
  The heading of the map, measured in degrees clockwise from true north.
 
  The value `0` means that the top edge of the map view corresponds to true

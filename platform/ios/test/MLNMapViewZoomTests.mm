@@ -48,6 +48,32 @@
   }
 }
 
+- (void)testCameraTargetBounds {
+  MLNCoordinateBounds bounds = {
+      CLLocationCoordinate2DMake(-10, -10),
+      CLLocationCoordinate2DMake(10, 10),
+  };
+  self.mapView.cameraTargetBounds = bounds;
+
+  MLNCoordinateBounds visibleBounds = self.mapView.visibleCoordinateBounds;
+  XCTAssertLessThan(visibleBounds.sw.latitude, bounds.sw.latitude);
+  XCTAssertLessThan(visibleBounds.sw.longitude, bounds.sw.longitude);
+
+  XCTAssertEqualWithAccuracy(self.mapView.cameraTargetBounds.sw.latitude, bounds.sw.latitude, 1e-8);
+  XCTAssertEqualWithAccuracy(self.mapView.cameraTargetBounds.sw.longitude, bounds.sw.longitude, 1e-8);
+  XCTAssertEqualWithAccuracy(self.mapView.cameraTargetBounds.ne.latitude, bounds.ne.latitude, 1e-8);
+  XCTAssertEqualWithAccuracy(self.mapView.cameraTargetBounds.ne.longitude, bounds.ne.longitude, 1e-8);
+
+  self.mapView.centerCoordinate = CLLocationCoordinate2DMake(50, 50);
+  XCTAssertEqualWithAccuracy(self.mapView.centerCoordinate.latitude, bounds.ne.latitude, 1e-8);
+  XCTAssertEqualWithAccuracy(self.mapView.centerCoordinate.longitude, bounds.ne.longitude, 1e-8);
+
+  [self.mapView resetCameraTargetBounds];
+  self.mapView.centerCoordinate = CLLocationCoordinate2DMake(50, 50);
+  XCTAssertEqualWithAccuracy(self.mapView.centerCoordinate.latitude, 50, 1e-8);
+  XCTAssertEqualWithAccuracy(self.mapView.centerCoordinate.longitude, 50, 1e-8);
+}
+
 - (void)testZoomEnabled {
   UIPinchGestureRecognizerMock *gesture = [[UIPinchGestureRecognizerMock alloc] initWithTarget:nil
                                                                                         action:nil];

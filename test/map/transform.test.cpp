@@ -639,6 +639,7 @@ TEST(Transform, LatLngBounds) {
 
     Transform transform;
     transform.resize({1000, 1000});
+    transform.setConstrainMode(ConstrainMode::HeightOnly);
 
     transform.jumpTo(CameraOptions().withCenter(LatLng()).withZoom(transform.getState().getMaxZoom()));
 

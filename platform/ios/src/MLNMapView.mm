@@ -3960,6 +3960,22 @@ static void *windowScreenContext = &windowScreenContext;
   ;
 }
 
+- (void)setCameraTargetBounds:(MLNCoordinateBounds)cameraTargetBounds {
+  mbgl::LatLng sw = {cameraTargetBounds.sw.latitude, cameraTargetBounds.sw.longitude};
+  mbgl::LatLng ne = {cameraTargetBounds.ne.latitude, cameraTargetBounds.ne.longitude};
+  self.mbglMap.setBounds(mbgl::BoundOptions().withLatLngBounds(mbgl::LatLngBounds::hull(sw, ne)));
+  self.mbglMap.setConstrainMode(mbgl::ConstrainMode::HeightOnly);
+}
+
+- (MLNCoordinateBounds)cameraTargetBounds {
+  return MLNCoordinateBoundsFromLatLngBounds(*self.mbglMap.getBounds().bounds);
+}
+
+- (void)resetCameraTargetBounds {
+  self.mbglMap.setBounds(mbgl::BoundOptions().withLatLngBounds(mbgl::LatLngBounds()));
+  self.mbglMap.setConstrainMode(mbgl::ConstrainMode::HeightOnly);
+}
+
 - (CGFloat)minimumPitch {
   return *self.mbglMap.getBounds().minPitch;
 }
