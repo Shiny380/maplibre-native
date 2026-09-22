@@ -9,6 +9,8 @@ class RenderRasterDEMSource final : public RenderTileSetSource {
 public:
     explicit RenderRasterDEMSource(Immutable<style::TileSource::Impl>, const TaggedScheduler&);
 
+    std::optional<double> queryElevation(const LatLng&) const;
+
     std::unordered_map<std::string, std::vector<Feature>> queryRenderedFeatures(
         const ScreenLineString& geometry,
         const TransformState& transformState,

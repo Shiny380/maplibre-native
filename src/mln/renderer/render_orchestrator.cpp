@@ -6,6 +6,7 @@
 #include <mln/renderer/renderer_observer.hpp>
 #include <mln/renderer/render_source.hpp>
 #include <mln/renderer/render_layer.hpp>
+#include <mln/renderer/sources/render_raster_dem_source.hpp>
 #include <mln/renderer/render_static_data.hpp>
 #include <mln/renderer/render_tree.hpp>
 #include <mln/renderer/update_parameters.hpp>
@@ -709,6 +710,18 @@ std::vector<Feature> RenderOrchestrator::querySourceFeatures(const std::string& 
     if (!source) return {};
 
     return source->querySourceFeatures(options);
+}
+
+std::optional<double> RenderOrchestrator::queryRasterDEMElevation(const std::string& sourceID,
+                                                                  const LatLng& latLng) const {
+    MLN_TRACE_FUNC();
+
+    const RenderSource* source = getRenderSource(sourceID);
+    if (!source || source->baseImpl->type != style::SourceType::RasterDEM) {
+        return std::nullopt;
+    }
+
+    return static_cast<const RenderRasterDEMSource*>(source)->queryElevation(latLng);
 }
 
 FeatureExtensionValue RenderOrchestrator::queryFeatureExtensions(

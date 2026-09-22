@@ -174,6 +174,12 @@ std::vector<Feature> AndroidRendererFrontend::querySourceFeatures(const std::str
     return mapRenderer.actor().ask(&Renderer::querySourceFeatures, sourceID, options).get();
 }
 
+std::optional<double> AndroidRendererFrontend::queryRasterDEMElevation(const std::string& sourceID,
+                                                                       const LatLng& latLng) const {
+    // Waits for the result from the orchestration thread and returns
+    return mapRenderer.actor().ask(&Renderer::queryRasterDEMElevation, sourceID, latLng).get();
+}
+
 void AndroidRendererFrontend::setFeatureState(const std::string& sourceID,
                                               const std::optional<std::string>& sourceLayerID,
                                               const std::string& featureID,

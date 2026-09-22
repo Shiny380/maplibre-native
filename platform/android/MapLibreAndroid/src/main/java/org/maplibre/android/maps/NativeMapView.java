@@ -1125,6 +1125,15 @@ final class NativeMapView implements NativeMap {
   }
 
   @Override
+  @Nullable
+  public Double queryRasterDEMElevation(@NonNull String sourceId, @NonNull LatLng latLng) {
+    if (checkState("queryRasterDEMElevation")) {
+      return null;
+    }
+    return nativeQueryRasterDEMElevation(sourceId, latLng.getLatitude(), latLng.getLongitude());
+  }
+
+  @Override
   public int getRenderedFeatureCount(@Nullable String featureId,
                                      @Nullable String layerId,
                                      @Nullable String sourceId) {
@@ -1763,6 +1772,10 @@ final class NativeMapView implements NativeMap {
                                                              float right, float bottom,
                                                              String[] layerIds,
                                                              Object[] filter);
+
+  @Nullable
+  @Keep
+  private native Double nativeQueryRasterDEMElevation(String sourceId, double latitude, double longitude);
 
   @Keep
   private native int nativeGetRenderedFeatureCount(String feature, String layer, String source);

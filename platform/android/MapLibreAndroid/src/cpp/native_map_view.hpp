@@ -259,6 +259,8 @@ public:
         const jni::Array<jni::String>&,
         const jni::Array<jni::Object<>>& jfilter);
 
+    jni::Local<jni::Double> queryRasterDEMElevation(JNIEnv&, const jni::String&, jni::jdouble, jni::jdouble);
+
     void setFeatureState(JNIEnv&,
                          const jni::String& sourceId,
                          const jni::String& sourceLayerId,
