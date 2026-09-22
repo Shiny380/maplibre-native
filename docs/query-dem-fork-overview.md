@@ -317,4 +317,5 @@ When rebuilding the same version repeatedly, use `--refresh-dependencies` in the
 3. `platform/android/MapLibreAndroid/src/main/java/org/maplibre/android/maps/MapLibreMap.java`
 4. `platform/ios/src/MLNMapView.h`
 5. `test/style/source.test.cpp`
-6. `scripts/build-ios-local.sh`\n7. `scripts/build-android-local.sh`
+6. `scripts/build-ios-local.sh`
+7. `scripts/build-android-local.sh`
