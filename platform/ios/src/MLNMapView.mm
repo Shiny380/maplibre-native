@@ -3974,6 +3974,26 @@ static void *windowScreenContext = &windowScreenContext;
   ;
 }
 
+- (void)setCameraTargetBounds:(MLNCoordinateBounds)cameraTargetBounds {
+  mln::LatLng sw = {cameraTargetBounds.sw.latitude, cameraTargetBounds.sw.longitude};
+  mln::LatLng ne = {cameraTargetBounds.ne.latitude, cameraTargetBounds.ne.longitude};
+
+  // Target bounds constrain only the camera center. Switch out of Screen mode
+  // before applying the bounds so setBounds() does not fit the viewport to them.
+  self.mbglMap.setConstrainMode(mln::ConstrainMode::HeightOnly);
+  self.mbglMap.setBounds(
+      mln::BoundOptions().withLatLngBounds(mln::LatLngBounds::hull(sw, ne)));
+}
+
+- (MLNCoordinateBounds)cameraTargetBounds {
+  return MLNCoordinateBoundsFromLatLngBounds(*self.mbglMap.getBounds().bounds);
+}
+
+- (void)resetCameraTargetBounds {
+  self.mbglMap.setConstrainMode(mln::ConstrainMode::HeightOnly);
+  self.mbglMap.setBounds(mln::BoundOptions().withLatLngBounds(mln::LatLngBounds()));
+}
+
 - (CGFloat)minimumPitch {
   return *self.mbglMap.getBounds().minPitch;
 }

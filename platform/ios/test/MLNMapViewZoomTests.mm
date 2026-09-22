@@ -48,6 +48,62 @@
   }
 }
 
+- (void)testCameraTargetBounds {
+  self.mapView.zoomLevel = 1;
+
+  MLNCoordinateBounds bounds = {
+      CLLocationCoordinate2DMake(-10, -10),
+      CLLocationCoordinate2DMake(10, 10),
+  };
+  self.mapView.cameraTargetBounds = bounds;
+
+  // Target bounds constrain the center, not the entire visible viewport.
+  MLNCoordinateBounds visibleBounds = self.mapView.visibleCoordinateBounds;
+  XCTAssertLessThan(visibleBounds.sw.latitude, bounds.sw.latitude);
+  XCTAssertLessThan(visibleBounds.sw.longitude, bounds.sw.longitude);
+  XCTAssertGreaterThan(visibleBounds.ne.latitude, bounds.ne.latitude);
+  XCTAssertGreaterThan(visibleBounds.ne.longitude, bounds.ne.longitude);
+
+  XCTAssertEqualWithAccuracy(self.mapView.cameraTargetBounds.sw.latitude, bounds.sw.latitude, 1e-8);
+  XCTAssertEqualWithAccuracy(self.mapView.cameraTargetBounds.sw.longitude, bounds.sw.longitude, 1e-8);
+  XCTAssertEqualWithAccuracy(self.mapView.cameraTargetBounds.ne.latitude, bounds.ne.latitude, 1e-8);
+  XCTAssertEqualWithAccuracy(self.mapView.cameraTargetBounds.ne.longitude, bounds.ne.longitude, 1e-8);
+
+  self.mapView.centerCoordinate = CLLocationCoordinate2DMake(50, 50);
+  XCTAssertEqualWithAccuracy(self.mapView.centerCoordinate.latitude, bounds.ne.latitude, 1e-8);
+  XCTAssertEqualWithAccuracy(self.mapView.centerCoordinate.longitude, bounds.ne.longitude, 1e-8);
+
+  [self.mapView resetCameraTargetBounds];
+  self.mapView.centerCoordinate = CLLocationCoordinate2DMake(50, 50);
+  XCTAssertEqualWithAccuracy(self.mapView.centerCoordinate.latitude, 50, 1e-8);
+  XCTAssertEqualWithAccuracy(self.mapView.centerCoordinate.longitude, 50, 1e-8);
+}
+
+- (void)testCameraTargetBoundsReplacesMaximumScreenBoundsWithoutFittingViewport {
+  MLNCoordinateBounds screenBounds = {
+      CLLocationCoordinate2DMake(-30, -30),
+      CLLocationCoordinate2DMake(30, 30),
+  };
+  self.mapView.maximumScreenBounds = screenBounds;
+
+  double zoomBeforeTargetBounds = self.mapView.zoomLevel;
+
+  MLNCoordinateBounds targetBounds = {
+      CLLocationCoordinate2DMake(-5, -5),
+      CLLocationCoordinate2DMake(5, 5),
+  };
+  self.mapView.cameraTargetBounds = targetBounds;
+
+  // Switching to target-only bounds must not fit the viewport to the new bounds.
+  XCTAssertEqualWithAccuracy(self.mapView.zoomLevel, zoomBeforeTargetBounds, 1e-8);
+
+  MLNCoordinateBounds visibleBounds = self.mapView.visibleCoordinateBounds;
+  XCTAssertLessThan(visibleBounds.sw.latitude, targetBounds.sw.latitude);
+  XCTAssertLessThan(visibleBounds.sw.longitude, targetBounds.sw.longitude);
+  XCTAssertGreaterThan(visibleBounds.ne.latitude, targetBounds.ne.latitude);
+  XCTAssertGreaterThan(visibleBounds.ne.longitude, targetBounds.ne.longitude);
+}
+
 - (void)testZoomEnabled {
   UIPinchGestureRecognizerMock *gesture = [[UIPinchGestureRecognizerMock alloc] initWithTarget:nil
                                                                                         action:nil];
