@@ -2256,6 +2256,24 @@ of north, the map will automatically snap to exact north.
     NS_SWIFT_NAME(visibleFeatures(in:styleLayerIdentifiers:predicate:));
 
 /**
+ Returns elevation in meters at the given geographic coordinate from a named
+ ``MLNRasterDEMSource``.
+
+ This method queries only currently retained, currently loaded raster DEM tiles.
+ It does not trigger additional loading and does not apply terrain exaggeration.
+
+ @param coordinate The geographic coordinate to query.
+ @param sourceIdentifier The identifier of the raster DEM source to query.
+ @return Elevation in meters, or `nil` if no source with the identifier exists,
+    if the source is not a raster DEM source, if no visible style layer keeps
+    the source active, if tiles are unavailable, or if no retained parsed DEM
+    tile covers the coordinate.
+ */
+- (nullable NSNumber *)elevationAtCoordinate:(CLLocationCoordinate2D)coordinate
+           fromRasterDEMSourceWithIdentifier:(NSString *)sourceIdentifier
+    NS_SWIFT_NAME(elevation(at:fromRasterDEMSourceWithIdentifier:));
+
+/**
  If MLNMapOptions.featureInfoEnabled is set, returns the number of features rendered in the previous
  frame for a given feature, layer and source.  A nil value for any criterion matches all values.
  */
