@@ -74,7 +74,8 @@ while (($#)); do
   esac
 done
 
-case "${RENDERER,,}" in
+RENDERER_LOWER="$(printf '%s' "$RENDERER" | tr '[:upper:]' '[:lower:]')"
+case "$RENDERER_LOWER" in
   vulkan)
     RENDERER="vulkan"
     PUBLICATION_PREFIX="Vulkan"
@@ -96,7 +97,8 @@ case "${RENDERER,,}" in
     ;;
 esac
 
-case "${BUILD_TYPE,,}" in
+BUILD_TYPE_LOWER="$(printf '%s' "$BUILD_TYPE" | tr '[:upper:]' '[:lower:]')"
+case "$BUILD_TYPE_LOWER" in
   release)
     BUILD_TYPE="release"
     ;;
