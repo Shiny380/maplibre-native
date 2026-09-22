@@ -1,4 +1,4 @@
-#include <mbgl/test.hpp>
+#include <mln/test.hpp>
 #include "test_runner_common.hpp"
 
 #include <unistd.h>
@@ -7,8 +7,8 @@
 #include <gtest/gtest.h>
 #include <android/log.h>
 
-using namespace mbgl;
-using namespace mbgl::android;
+using namespace mln;
+using namespace mln::android;
 
 std::string testResultToStr(const ::testing::TestResult* testResult) {
     if (testResult->Passed()) return " (PASSED)";
@@ -69,16 +69,16 @@ void runner(const std::string& gtestOutput) {
     }
     argv.push_back(nullptr);
 
-    mbgl::Log::Info(mbgl::Event::General, "Start TestRunner");
-    int status = mbgl::runTests(argv.size(), argv.data());
-    mbgl::Log::Info(mbgl::Event::General, "TestRunner finished with status: '" + std::to_string(status) + "'");
+    mln::Log::Info(mln::Event::General, "Start TestRunner");
+    int status = mln::runTests(argv.size(), argv.data());
+    mln::Log::Info(mln::Event::General, "TestRunner finished with status: '" + std::to_string(status) + "'");
     running = false;
     success = (status == 0);
     ALooper_wake(looper);
 }
 
 void android_main(struct android_app* app) {
-    mbgl::android::theJVM = app->activity->vm;
+    mln::android::theJVM = app->activity->vm;
     JNIEnv* env = nullptr;
     std::thread runnerThread;
     app->activity->vm->AttachCurrentThread(&env, NULL);
@@ -90,14 +90,14 @@ void android_main(struct android_app* app) {
 
     if (copyFile(env, app->activity->assetManager, zipFile, storagePath, "data.zip")) {
         if (chdir(storagePath.c_str())) {
-            mbgl::Log::Error(mbgl::Event::General, "Failed to change the directory to storage dir");
+            mln::Log::Error(mln::Event::General, "Failed to change the directory to storage dir");
             changeState(env, app, success);
         } else {
             unZipFile(env, zipFile, storagePath);
             runnerThread = std::thread(runner, gtestOutput);
         }
     } else {
-        mbgl::Log::Error(mbgl::Event::General, "Failed to copy zip file '" + zipFile + "' to external storage");
+        mln::Log::Error(mln::Event::General, "Failed to copy zip file '" + zipFile + "' to external storage");
         changeState(env, app, success);
     }
 
@@ -105,14 +105,14 @@ void android_main(struct android_app* app) {
     struct android_poll_source* source = nullptr;
 
     while (true) {
-        ALooper_pollAll(-1, &outFd, &outEvents, reinterpret_cast<void**>(&source));
+        ALooper_pollOnce(-1, &outFd, &outEvents, reinterpret_cast<void**>(&source));
         if (source != nullptr) {
             source->process(app, source);
         }
 
         if (!running) {
             std::call_once(done, [&] {
-                mbgl::Log::Info(mbgl::Event::General, "TestRunner done");
+                mln::Log::Info(mln::Event::General, "TestRunner done");
                 runnerThread.join();
                 changeState(env, app, success);
             });
@@ -120,7 +120,7 @@ void android_main(struct android_app* app) {
 
         if (app->destroyRequested != 0) {
             app->activity->vm->DetachCurrentThread();
-            mbgl::Log::Info(mbgl::Event::General, "Close the App!");
+            mln::Log::Info(mln::Event::General, "Close the App!");
             return;
         }
     }

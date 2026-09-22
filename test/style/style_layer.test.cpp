@@ -1,36 +1,36 @@
-#include <mbgl/style/layers/custom_layer.hpp>
-#include <mbgl/style/layers/custom_layer_impl.hpp>
-#include <mbgl/style/conversion/filter.hpp>
-#include <mbgl/style/conversion/json.hpp>
-#include <mbgl/style/expression/dsl.hpp>
-#include <mbgl/style/expression/format_expression.hpp>
-#include <mbgl/style/expression/image.hpp>
-#include <mbgl/style/expression/match.hpp>
-#include <mbgl/style/layers/background_layer.hpp>
-#include <mbgl/style/layers/background_layer_impl.hpp>
-#include <mbgl/style/layers/circle_layer.hpp>
-#include <mbgl/style/layers/circle_layer_impl.hpp>
-#include <mbgl/style/layers/fill_layer.hpp>
-#include <mbgl/style/layers/fill_layer_impl.hpp>
-#include <mbgl/style/layers/line_layer.hpp>
-#include <mbgl/style/layers/line_layer_impl.hpp>
-#include <mbgl/style/layers/raster_layer.hpp>
-#include <mbgl/style/layers/raster_layer_impl.hpp>
-#include <mbgl/style/layers/symbol_layer.hpp>
-#include <mbgl/style/layers/symbol_layer_impl.hpp>
-#include <mbgl/style/style_impl.hpp>
-#include <mbgl/test/stub_file_source.hpp>
-#include <mbgl/test/stub_layer_observer.hpp>
-#include <mbgl/test/util.hpp>
-#include <mbgl/util/color.hpp>
-#include <mbgl/util/io.hpp>
-#include <mbgl/util/run_loop.hpp>
+#include <mln/style/layers/custom_layer.hpp>
+#include <mln/style/layers/custom_layer_impl.hpp>
+#include <mln/style/conversion/filter.hpp>
+#include <mln/style/conversion/json.hpp>
+#include <mln/style/expression/dsl.hpp>
+#include <mln/style/expression/format_expression.hpp>
+#include <mln/style/expression/image.hpp>
+#include <mln/style/expression/match.hpp>
+#include <mln/style/layers/background_layer.hpp>
+#include <mln/style/layers/background_layer_impl.hpp>
+#include <mln/style/layers/circle_layer.hpp>
+#include <mln/style/layers/circle_layer_impl.hpp>
+#include <mln/style/layers/fill_layer.hpp>
+#include <mln/style/layers/fill_layer_impl.hpp>
+#include <mln/style/layers/line_layer.hpp>
+#include <mln/style/layers/line_layer_impl.hpp>
+#include <mln/style/layers/raster_layer.hpp>
+#include <mln/style/layers/raster_layer_impl.hpp>
+#include <mln/style/layers/symbol_layer.hpp>
+#include <mln/style/layers/symbol_layer_impl.hpp>
+#include <mln/style/style_impl.hpp>
+#include <mln/test/stub_file_source.hpp>
+#include <mln/test/stub_layer_observer.hpp>
+#include <mln/test/util.hpp>
+#include <mln/util/color.hpp>
+#include <mln/util/io.hpp>
+#include <mln/util/run_loop.hpp>
 
 #include <memory>
 
-using namespace mbgl;
-using namespace mbgl::style;
-using namespace mbgl::style::conversion;
+using namespace mln;
+using namespace mln::style;
+using namespace mln::style::conversion;
 using namespace expression;
 using namespace expression::dsl;
 using namespace std::literals::string_literals;
@@ -63,9 +63,9 @@ class MockLayoutProperties : public Properties<TextField> {};
 class MockPaintProperties : public Properties<TextColor> {};
 using MockOverrides = FormatSectionOverrides<MockPaintProperties::OverridableProperties>;
 
-mbgl::style::Filter parseFilter(const std::string& expression) {
+mln::style::Filter parseFilter(const std::string& expression) {
     Error error;
-    return *convertJSON<mbgl::style::Filter>(expression, error);
+    return *convertJSON<mln::style::Filter>(expression, error);
 }
 
 } // namespace
@@ -285,6 +285,44 @@ TEST(Layer, Observer) {
     };
     layer->setLineCap(lineCap);
     EXPECT_FALSE(layoutPropertyChanged);
+
+    // Notifies observer on source-layer change.
+    // This is required so that the render orchestrator re-evaluates already-loaded
+    // tiles when a layer's source-layer is changed at runtime (e.g. after addLayer).
+    bool sourceLayerChanged = false;
+    observer.layerChanged = [&](Layer& layer_) {
+        EXPECT_EQ(layer.get(), &layer_);
+        sourceLayerChanged = true;
+    };
+    layer->setSourceLayer("roads");
+    EXPECT_TRUE(sourceLayerChanged);
+
+    // Does not notify observer on no-op source-layer change.
+    sourceLayerChanged = false;
+    observer.layerChanged = [&](Layer& layer_) {
+        EXPECT_EQ(layer.get(), &layer_);
+        sourceLayerChanged = true;
+    };
+    layer->setSourceLayer("roads");
+    EXPECT_FALSE(sourceLayerChanged);
+
+    // Notifies observer on source ID change.
+    bool sourceIDChanged = false;
+    observer.layerChanged = [&](Layer& layer_) {
+        EXPECT_EQ(layer.get(), &layer_);
+        sourceIDChanged = true;
+    };
+    layer->setSourceID("other-source");
+    EXPECT_TRUE(sourceIDChanged);
+
+    // Does not notify observer on no-op source ID change.
+    sourceIDChanged = false;
+    observer.layerChanged = [&](Layer& layer_) {
+        EXPECT_EQ(layer.get(), &layer_);
+        sourceIDChanged = true;
+    };
+    layer->setSourceID("other-source");
+    EXPECT_FALSE(sourceIDChanged);
 }
 
 TEST(Layer, DuplicateLayer) {

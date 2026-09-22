@@ -1,8 +1,8 @@
 #include "glfw_vulkan_backend.hpp"
 
-#include <mbgl/gfx/backend_scope.hpp>
-#include <mbgl/vulkan/renderable_resource.hpp>
-#include <mbgl/vulkan/context.hpp>
+#include <mln/gfx/backend_scope.hpp>
+#include <mln/vulkan/renderable_resource.hpp>
+#include <mln/vulkan/context.hpp>
 
 #ifdef _WIN32
 #define VK_USE_PLATFORM_WIN32_KHR
@@ -82,7 +82,6 @@ public:
             return device.get();
         }
 
-        const std::vector<const char*> layers = {"VK_LAYER_KHRONOS_validation"};
         const std::vector<const char*> extensions = {
             VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 #ifdef __APPLE__
@@ -93,10 +92,8 @@ public:
         float queuePriority = 1.0f;
         vk::DeviceQueueCreateInfo queueCreateInfo(vk::DeviceQueueCreateFlags(), getQueueIndex(), 1, &queuePriority);
 
-        auto createInfo = vk::DeviceCreateInfo()
-                              .setQueueCreateInfos(queueCreateInfo)
-                              .setPEnabledExtensionNames(extensions)
-                              .setPEnabledLayerNames(layers);
+        auto createInfo =
+            vk::DeviceCreateInfo().setQueueCreateInfos(queueCreateInfo).setPEnabledExtensionNames(extensions);
 
         device = physicalDevice.createDeviceUnique(createInfo, nullptr, dispatcher);
         dispatcher.init(device.get());
@@ -107,8 +104,8 @@ public:
     uint32_t getQueueIndex() { return graphicsQueueIndex; }
 
 private:
-    vk::DynamicLoader dynamicLoader;
-    vk::DispatchLoaderDynamic dispatcher;
+    mln::vulkan::DynamicLoader dynamicLoader;
+    mln::vulkan::DispatchLoaderDynamic dispatcher;
 
     vk::UniqueInstance instance;
     vk::PhysicalDevice physicalDevice;
@@ -118,7 +115,7 @@ private:
 
 #endif
 
-class GLFWVulkanRenderableResource final : public mbgl::vulkan::SurfaceRenderableResource {
+class GLFWVulkanRenderableResource final : public mln::vulkan::SurfaceRenderableResource {
 public:
     explicit GLFWVulkanRenderableResource(GLFWVulkanBackend& backend_, bool capFrameRate)
         : SurfaceRenderableResource(backend_,
@@ -136,7 +133,7 @@ public:
         if (result != VK_SUCCESS) throw std::runtime_error("Failed to create glfw window surface");
 
         surface = vk::UniqueSurfaceKHR(surface_,
-                                       vk::ObjectDestroy<vk::Instance, vk::DispatchLoaderDynamic>(
+                                       mln::vulkan::ObjectDestroy<vk::Instance>(
                                            backendImpl.getInstance().get(), nullptr, backendImpl.getDispatcher()));
     }
 
@@ -144,36 +141,34 @@ public:
 };
 
 GLFWVulkanBackend::GLFWVulkanBackend(GLFWwindow* window_, const bool capFrameRate)
-    : mbgl::vulkan::RendererBackend(mbgl::gfx::ContextMode::Unique),
-      mbgl::vulkan::Renderable(
+    : mln::vulkan::RendererBackend(mln::gfx::ContextMode::Unique),
+      mln::vulkan::Renderable(
           [window_] {
               int fbWidth;
               int fbHeight;
               glfwGetFramebufferSize(window_, &fbWidth, &fbHeight);
-              return mbgl::Size{static_cast<uint32_t>(fbWidth), static_cast<uint32_t>(fbHeight)};
+              return mln::Size{static_cast<uint32_t>(fbWidth), static_cast<uint32_t>(fbHeight)};
           }(),
           std::make_unique<GLFWVulkanRenderableResource>(*this, capFrameRate)),
       window(window_) {
     init();
 }
 
-GLFWVulkanBackend::~GLFWVulkanBackend() {
-    context.reset();
+GLFWVulkanBackend::~GLFWVulkanBackend() {}
+
+mln::Size GLFWVulkanBackend::getFramebufferSize() const {
+    return getSize();
 }
 
-mbgl::Size GLFWVulkanBackend::getSize() const {
-    return size;
-}
+void GLFWVulkanBackend::setFramebufferSize(const mln::Size newSize) {
+    setRenderableSize(newSize);
 
-void GLFWVulkanBackend::setSize(const mbgl::Size newSize) {
-    size = newSize;
-
-    auto& contextImpl = static_cast<mbgl::vulkan::Context&>(*context);
+    auto& contextImpl = static_cast<mln::vulkan::Context&>(*context);
     contextImpl.requestSurfaceUpdate();
 }
 
 std::vector<const char*> GLFWVulkanBackend::getInstanceExtensions() {
-    auto extensions = mbgl::vulkan::RendererBackend::getInstanceExtensions();
+    auto extensions = mln::vulkan::RendererBackend::getInstanceExtensions();
 
     uint32_t glfwExtensionCount = 0;
     const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
@@ -190,7 +185,7 @@ void GLFWVulkanBackend::initInstance() {
 
     // this method is required to set `instance` to a valid vkInstance
     instance = vk::UniqueInstance(VkContext::shared().getInstance(),
-                                  vk::ObjectDestroy<vk::NoParent, vk::DispatchLoaderDynamic>(nullptr, dispatcher));
+                                  mln::vulkan::ObjectDestroy<vk::NoParent>(nullptr, dispatcher));
 
     // debug builds also require:
     // - enabling either `VK_EXT_debug_utils` (and updating `debugUtilsEnabled`) or `VK_EXT_debug_report` extension
@@ -207,7 +202,7 @@ void GLFWVulkanBackend::initDevice() {
 
     physicalDevice = VkContext::shared().getPhysicalDevice();
     device = vk::UniqueDevice(VkContext::shared().getDevice(),
-                              vk::ObjectDestroy<vk::NoParent, vk::DispatchLoaderDynamic>(nullptr, dispatcher));
+                              mln::vulkan::ObjectDestroy<vk::NoParent>(nullptr, dispatcher));
 
     graphicsQueueIndex = presentQueueIndex = VkContext::shared().getQueueIndex();
     physicalDeviceFeatures = vk::PhysicalDeviceFeatures();
@@ -215,13 +210,13 @@ void GLFWVulkanBackend::initDevice() {
 
 #endif
 
-namespace mbgl {
+namespace mln {
 namespace gfx {
 
 template <>
-std::unique_ptr<GLFWBackend> Backend::Create<mbgl::gfx::Backend::Type::Vulkan>(GLFWwindow* window, bool capFrameRate) {
+std::unique_ptr<GLFWBackend> Backend::Create<mln::gfx::Backend::Type::Vulkan>(GLFWwindow* window, bool capFrameRate) {
     return std::make_unique<GLFWVulkanBackend>(window, capFrameRate);
 }
 
 } // namespace gfx
-} // namespace mbgl
+} // namespace mln

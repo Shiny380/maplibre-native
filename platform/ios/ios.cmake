@@ -4,12 +4,6 @@ target_include_directories(
         ${PROJECT_SOURCE_DIR}/platform/ios/src
 )
 
-target_link_libraries(
-    mbgl-core
-    PRIVATE
-        mbgl-vendor-filesystem
-)
-
 set_target_properties(mbgl-core PROPERTIES XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC YES)
 
 file(GLOB_RECURSE IOS_SDK_SOURCE_FILES
@@ -49,7 +43,7 @@ add_custom_command(
     COMMAND ${ACTOOL_EXECUTABLE}
             --compile ${FRAMEWORK_BUNDLE_DIR}
             --platform iphoneos
-            --minimum-deployment-target 12.0
+            --minimum-deployment-target ${CMAKE_OSX_DEPLOYMENT_TARGET}
             ${CMAKE_CURRENT_LIST_DIR}/resources/Images.xcassets
     COMMAND ${CMAKE_COMMAND} -E copy
             ${CMAKE_CURRENT_LIST_DIR}/framework/Info-static.plist
@@ -63,6 +57,8 @@ list(APPEND IOS_SDK_RESOURCE_FILES ${FRAMEWORK_BUNDLE_DIR})
 add_custom_target(create-framework-bundle
     DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/Mapbox.bundle/Assets.car
 )
+
+mbgl_add_darwin_style_code_target()
 
 add_library(
     ios-sdk-static

@@ -1,7 +1,6 @@
 plugins {
     alias(libs.plugins.kotlinter)
     id("com.android.application")
-    alias(libs.plugins.kotlinAndroid)
     alias(libs.plugins.kotlinPluginSerialization)
     id("maplibre.gradle-make")
     id("maplibre.gradle-config")
@@ -20,12 +19,12 @@ fun obtainTestBuildType(): String {
 android {
     ndkVersion = Versions.ndkVersion
 
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "org.maplibre.android.testapp"
         minSdk = 23
-        targetSdk = 33
+        targetSdk = 35
         versionCode = 14
         testInstrumentationRunner = "org.maplibre.android.InstrumentationRunner"
         multiDexEnabled = true
@@ -35,7 +34,7 @@ android {
         manifestPlaceholders["SENTRY_ENV"] = ""
     }
 
-    nativeBuild(listOf("example-custom-layer"))
+    nativeBuild(emptyList())
 
     packaging {
         resources.excludes += listOf("META-INF/LICENSE.txt", "META-INF/NOTICE.txt", "LICENSE.txt")
@@ -43,12 +42,12 @@ android {
 
     buildTypes {
         getByName("debug") {
+            manifestPlaceholders += mapOf()
             isJniDebuggable = true
             isDebuggable = true
-            isTestCoverageEnabled = true
             isMinifyEnabled = false
             isShrinkResources = false
-            proguardFiles(getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro")
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
 
             packaging {
                 jniLibs {
@@ -57,13 +56,15 @@ android {
             }
 
             buildConfigField("String", "SENTRY_DSN", "\"" + (System.getenv("SENTRY_DSN") ?: "") + "\"")
+            enableUnitTestCoverage = true
+            enableAndroidTestCoverage = true
             manifestPlaceholders["SENTRY_DSN"] = System.getenv("SENTRY_DSN") ?: ""
         }
 
         getByName("release") {
             isMinifyEnabled = true
             isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro")
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             testProguardFiles("test-proguard-rules.pro")
             signingConfig = signingConfigs.getByName("debug")
 
@@ -81,7 +82,8 @@ android {
             dimension = "renderer"
             externalNativeBuild {
                 cmake {
-                    arguments("-DMLN_WITH_OPENGL=ON")
+                    arguments += "-DMLN_WITH_OPENGL=ON"
+                    targets += "example-custom-layer"
                 }
             }
         }
@@ -89,7 +91,8 @@ android {
             dimension = "renderer"
             externalNativeBuild {
                 cmake {
-                    arguments("-DMLN_WITH_VULKAN=ON")
+                    arguments += "-DMLN_WITH_VULKAN=ON"
+                    targets += "example-vulkan-custom-layer"
                 }
             }
         }
@@ -109,6 +112,15 @@ android {
             externalNativeBuild {
                 cmake {
                     arguments("-DMLN_WITH_WEBGPU=ON", "-DMLN_WEBGPU_IMPL_WGPU=ON")
+                }
+            }
+        }
+        create("multiBackend") {
+            dimension = "renderer"
+            externalNativeBuild {
+                cmake {
+                    arguments("-DMLN_ANDROID_MULTI_BACKEND=ON")
+                    targets("maplibre-opengl", "maplibre-vulkan")
                 }
             }
         }
@@ -143,7 +155,10 @@ dependencies {
 
     implementation(libs.maplibreJavaTurf)
 
+    implementation(libs.sentryAndroid)
+
     implementation(libs.supportRecyclerView)
+    implementation(libs.supportPrint)
     implementation(libs.supportDesign)
     implementation(libs.supportConstraintLayout)
     implementation(libs.kotlinxSerializationJson)
@@ -167,6 +182,9 @@ dependencies {
     androidTestImplementation(libs.androidxTestExtJUnit)
     androidTestImplementation(libs.androidxTestCoreKtx)
     androidTestImplementation(libs.kotlinxCoroutinesTest)
+
+    // version conflict when using androidTestImplementation
+    implementation(libs.androidxTracing)
 }
 
 apply<SentryConditionalPlugin>()

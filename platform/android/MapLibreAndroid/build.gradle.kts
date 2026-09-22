@@ -1,9 +1,7 @@
 plugins {
+    id("com.android.library")
     alias(libs.plugins.kotlinter)
     alias(libs.plugins.dokka)
-    id("com.android.library")
-    id("com.jaredsburrows.license")
-    kotlin("android")
     id("maplibre.download-vulkan-validation")
     id("maplibre.gradle-checkstyle")
     id("maplibre.gradle-dependencies-graph")
@@ -24,6 +22,7 @@ dependencies {
     implementation(libs.okhttp3)
     implementation(libs.timber)
     implementation(libs.interpolator)
+    implementation(libs.kotlinxCoroutinesCore)
 
     testImplementation(libs.junit)
     testImplementation(libs.mockito)
@@ -38,13 +37,15 @@ dependencies {
 
 dokka {
     moduleName.set("MapLibre Native Android")
+    val dokkaVariantName = "openglRelease"
 
     dokkaSourceSets {
-        main {
+        configureEach {
+            suppress.set(name != dokkaVariantName)
             includes.from("Module.md")
 
             sourceLink {
-                remoteUrl("https://github.com/maplibre/maplibre-native/tree/main/platform/android/")
+                remoteUrl.set(uri("https://github.com/maplibre/maplibre-native/tree/main/platform/android/"))
                 localDirectory.set(rootDir)
             }
 
@@ -61,7 +62,6 @@ android {
     defaultConfig {
         compileSdk = 34
         minSdk = 23
-        targetSdk = 33
         buildConfigField("String", "GIT_REVISION_SHORT", "\"${getGitRevision()}\"")
         buildConfigField("String", "GIT_REVISION", "\"${getGitRevision(false)}\"")
         buildConfigField(
@@ -109,17 +109,37 @@ android {
                 }
             }
         }
+        create("multiBackend") {
+            dimension = "renderer"
+            externalNativeBuild {
+                cmake {
+                    arguments("-DMLN_ANDROID_MULTI_BACKEND=ON")
+                    targets("maplibre-opengl", "maplibre-vulkan")
+                }
+            }
+        }
     }
 
     sourceSets {
         getByName("opengl") {
-            java.srcDirs("src/opengl/java/")
+            java.srcDirs("src/opengl/java/", "src/sharedRenderer/opengl/java/")
+        }
+        getByName("vulkan") {
+            java.srcDirs("src/vulkan/java/", "src/sharedRenderer/vulkan/java/")
         }
         listOf("webgpuDawn", "webgpuWgpu").forEach {
             getByName(it) {
-                java.srcDirs("src/vulkan/java")
+                java.srcDirs("src/vulkan/java/", "src/sharedRenderer/vulkan/java/")
                 manifest.srcFile("src/vulkan/AndroidManifest.xml")
             }
+        }
+        getByName("multiBackend") {
+            java.srcDirs(
+                "src/multiBackend/java/",
+                "src/sharedRenderer/opengl/java/",
+                "src/sharedRenderer/vulkan/java/"
+            )
+            manifest.srcFile("src/multiBackend/AndroidManifest.xml")
         }
     }
 
@@ -134,7 +154,7 @@ android {
     nativeBuild(nativeTargets)
 
     // Avoid naming conflicts, force usage of prefix
-    resourcePrefix("maplibre_")
+    resourcePrefix = "maplibre_"
 
     sourceSets {
         getByName("main") {
@@ -150,12 +170,14 @@ android {
             // http://robolectric.org/migrating/#migrating-to-40
             isIncludeAndroidResources = true
         }
+        targetSdk = 33
     }
 
     buildTypes {
         debug {
-            isTestCoverageEnabled = false
             isJniDebuggable = true
+            enableUnitTestCoverage = false
+            enableAndroidTestCoverage = false
         }
     }
 
@@ -171,10 +193,19 @@ android {
             "WrongThreadInterprocedural"
         )
         warningsAsErrors = false
+        targetSdk = 33
     }
 
     buildFeatures {
         buildConfig = true
+        prefabPublishing = project.findProperty("maplibre.abis") != "none"
+    }
+
+    prefab {
+        create("maplibre") {
+            headers = "../prefab-headers"
+            headerOnly = true
+        }
     }
 
     compileOptions {
@@ -182,16 +213,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 
-    kotlinOptions {
-        jvmTarget = "11"
-    }
-}
-
-licenseReport {
-    generateHtmlReport = false
-    generateJsonReport = true
-    copyHtmlReportToAssets = false
-    copyJsonReportToAssets = false
 }
 
 fun getGitRevision(shortRev: Boolean = true): String {
@@ -200,14 +221,41 @@ fun getGitRevision(shortRev: Boolean = true): String {
     return proc.inputStream.bufferedReader().readText().trim()
 }
 
+val syncPrefabHeaders by tasks.registering(Sync::class) {
+    val nativeRoot = rootProject.rootDir.resolve("../..")
+    from(nativeRoot.resolve("include")) {
+        include("mln/style/layers/custom_layer_host.hpp")
+        include("mln/style/layers/custom_layer_init_parameters.hpp")
+        include("mln/style/layers/custom_layer_render_parameters.hpp")
+        include("mln/style/layers/vulkan/custom_layer_init_parameters.hpp")
+        include("mln/style/layers/vulkan/custom_layer_render_parameters.hpp")
+    }
+    into(project.rootDir.resolve("prefab-headers"))
+}
+
+tasks.configureEach {
+    if (name == "syncPrefabHeaders") return@configureEach
+    if (name.contains("Prefab", ignoreCase = true) || name.contains("bundleLibRuntimeTo", ignoreCase = true)) {
+        dependsOn(syncPrefabHeaders)
+    }
+}
+
+// AGP 9.1.1 still adds the native build output to the AAR even when the Prefab module is
+// declared header-only. Keep the header-only metadata and omit that redundant unstripped copy.
+tasks.withType<org.gradle.api.tasks.bundling.Zip>().configureEach {
+    if (name.startsWith("bundle") && name.endsWith("Aar")) {
+        // The Prefab artifact is added under a `prefab/` destination by a nested copy spec,
+        // so its paths are still relative to the Prefab root when exclusions are evaluated.
+        exclude("modules/maplibre/libs/**")
+    }
+}
+
 configurations {
     getByName("implementation") {
         exclude(group = "commons-logging", module = "commons-logging")
         exclude(group = "commons-collections", module = "commons-collections")
     }
 }
-
-// apply<DownloadVulkanValidationPlugin>()
 
 // intentionally disabled
 // apply(plugin = "maplibre.jacoco-report")

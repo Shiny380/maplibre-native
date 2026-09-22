@@ -1,8 +1,8 @@
 #pragma once
 
-#include <mbgl/actor/actor_ref.hpp>
-#include <mbgl/actor/scheduler.hpp>
-#include <mbgl/util/image.hpp>
+#include <mln/actor/actor_ref.hpp>
+#include <mln/actor/scheduler.hpp>
+#include <mln/util/image.hpp>
 
 #include <memory>
 #include <mutex>
@@ -12,7 +12,7 @@
 #include <jni/jni.hpp>
 #include <android/native_window.h>
 
-namespace mbgl {
+namespace mln {
 
 template <class>
 class ActorRef;
@@ -92,6 +92,8 @@ public:
     AndroidRendererBackend& getRendererBackend() const { return *backend; }
     const TaggedScheduler& getThreadPool() const { return threadPool; }
 
+    void SetAsyncRendererCleanup(bool value) { asyncRendererCleanup = value; }
+
 protected:
     // Called from the GL Thread //
 
@@ -145,7 +147,9 @@ private:
     std::unique_ptr<AndroidRendererBackend> backend;
     std::unique_ptr<Renderer> renderer;
     std::unique_ptr<ActorRef<Renderer>> rendererRef;
-    std::unique_ptr<ANativeWindow, std::function<void(ANativeWindow*)>> window;
+
+    using UniqueANativeWindow = std::unique_ptr<ANativeWindow, std::function<void(ANativeWindow*)>>;
+    UniqueANativeWindow window;
 
     std::shared_ptr<UpdateParameters> updateParameters;
     std::mutex updateMutex;
@@ -156,10 +160,11 @@ private:
 
     bool framebufferSizeChanged = false;
     bool swapBehaviorFlush = false;
+    bool asyncRendererCleanup = false;
 
     mapbox::base::WeakPtrFactory<Scheduler> weakFactory{this};
     // Do not add members here, see `WeakPtrFactory`
 };
 
 } // namespace android
-} // namespace mbgl
+} // namespace mln

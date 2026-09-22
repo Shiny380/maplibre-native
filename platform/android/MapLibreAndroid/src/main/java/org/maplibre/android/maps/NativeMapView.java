@@ -13,6 +13,7 @@ import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.google.gson.JsonObject;
 import org.maplibre.geojson.Feature;
 import org.maplibre.geojson.Geometry;
 import org.maplibre.android.LibraryLoader;
@@ -1000,7 +1001,17 @@ final class NativeMapView implements NativeMap {
     if (checkState("removeLayer")) {
       return false;
     }
-    return nativeRemoveLayer(layer.getNativePtr());
+    if (layer.isDetached()) {
+      Logger.w(TAG, "Ignoring removeLayer() call on detached layer reference.");
+      return false;
+    }
+
+    final long nativePtr = layer.getNativePtr();
+    if (nativePtr == 0L) {
+      Logger.w(TAG, "Ignoring removeLayer() call on released layer pointer.");
+      return false;
+    }
+    return nativeRemoveLayer(nativePtr);
   }
 
   @Override
@@ -1110,7 +1121,52 @@ final class NativeMapView implements NativeMap {
       coordinates.bottom / pixelRatio,
       layerIds,
       filter != null ? filter.toArray() : null);
-    return features != null ? Arrays.asList(features) : new ArrayList<Feature>();
+    return features != null ? Arrays.asList(features) : new ArrayList<>();
+  }
+
+  @Override
+  public int getRenderedFeatureCount(@Nullable String featureId,
+                                     @Nullable String layerId,
+                                     @Nullable String sourceId) {
+    if (checkState("getRenderedFeatureCount")) {
+      return 0;
+    }
+    return nativeGetRenderedFeatureCount(featureId, layerId, sourceId);
+  }
+
+  // Feature State
+
+  @Override
+  public void setFeatureState(@NonNull String sourceId,
+                              @Nullable String sourceLayerId,
+                              @NonNull String featureId,
+                              @NonNull JsonObject state) {
+    if (checkState("setFeatureState")) {
+      return;
+    }
+    nativeSetFeatureState(sourceId, sourceLayerId, featureId, state);
+  }
+
+  @Override
+  @Nullable
+  public JsonObject getFeatureState(@NonNull String sourceId,
+                                    @Nullable String sourceLayerId,
+                                    @NonNull String featureId) {
+    if (checkState("getFeatureState")) {
+      return null;
+    }
+    return nativeGetFeatureState(sourceId, sourceLayerId, featureId);
+  }
+
+  @Override
+  public void removeFeatureState(@NonNull String sourceId,
+                                 @Nullable String sourceLayerId,
+                                 @Nullable String featureId,
+                                 @Nullable String stateKey) {
+    if (checkState("removeFeatureState")) {
+      return;
+    }
+    nativeRemoveFeatureState(sourceId, sourceLayerId, featureId, stateKey);
   }
 
   @Override
@@ -1376,6 +1432,20 @@ final class NativeMapView implements NativeMap {
   private void onSpriteRequested(String id, String url) {
     if (stateCallback != null) {
       stateCallback.onSpriteRequested(id, url);
+    }
+  }
+
+  @Keep
+  private void onRenderError() {
+    if (stateCallback != null) {
+      stateCallback.onRenderError();
+    }
+  }
+
+  @Keep
+  private void onSymbolError(String message) {
+    if (stateCallback != null) {
+      stateCallback.onSymbolError(message);
     }
   }
 
@@ -1694,6 +1764,27 @@ final class NativeMapView implements NativeMap {
                                                              String[] layerIds,
                                                              Object[] filter);
 
+  @Keep
+  private native int nativeGetRenderedFeatureCount(String feature, String layer, String source);
+
+  @Keep
+  private native void nativeSetFeatureState(String sourceId,
+                                            String sourceLayerId,
+                                            String featureId,
+                                            JsonObject state);
+
+  @Nullable
+  @Keep
+  private native JsonObject nativeGetFeatureState(String sourceId,
+                                                  String sourceLayerId,
+                                                  String featureId);
+
+  @Keep
+  private native void nativeRemoveFeatureState(String sourceId,
+                                               String sourceLayerId,
+                                               String featureId,
+                                               String stateKey);
+
   @NonNull
   @Keep
   private native Light nativeGetLight();
@@ -1867,5 +1958,9 @@ final class NativeMapView implements NativeMap {
     void onSpriteError(String id, String url);
 
     void onSpriteRequested(String id, String url);
+
+    void onRenderError();
+
+    void onSymbolError(String message);
   }
 }

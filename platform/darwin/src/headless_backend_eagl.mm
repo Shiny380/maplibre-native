@@ -1,13 +1,13 @@
-#include <mbgl/gl/headless_backend.hpp>
+#include <mln/gl/headless_backend.hpp>
 
 #include <OpenGLES/EAGL.h>
 
 #include <stdexcept>
 
-namespace mbgl {
+namespace mln {
 namespace gl {
 
-class EAGLBackendImpl : public HeadlessBackend::Impl {
+class EAGLBackendImpl final : public HeadlessBackend::Impl {
 public:
   EAGLBackendImpl() {
     glContext = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES3];
@@ -44,4 +44,4 @@ void HeadlessBackend::createImpl() {
 }
 
 }  // namespace gl
-}  // namespace mbgl
+}  // namespace mln

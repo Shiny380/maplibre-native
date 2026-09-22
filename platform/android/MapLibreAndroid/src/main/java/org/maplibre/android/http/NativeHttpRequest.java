@@ -38,7 +38,7 @@ public class NativeHttpRequest implements HttpResponder {
     // to cancel at the same time the request is getting
     // answered on the OkHTTP thread. We could get rid of
     // this lock by using Runnable when we move Android
-    // implementation of mbgl::RunLoop to Looper.
+    // implementation of mln::RunLoop to Looper.
     lock.lock();
     nativePtr = 0;
     lock.unlock();
@@ -61,7 +61,7 @@ public class NativeHttpRequest implements HttpResponder {
   }
 
   private void executeLocalRequest(String resourceUrl) {
-    new LocalRequestTask(new LocalRequestTask.OnLocalRequestResponse() {
+    new LocalRequestTask(MapLibre.getApplicationContext().getAssets(), new LocalRequestTask.OnLocalRequestResponse() {
       @Override
       public void onResponse(@Nullable byte[] bytes) {
         if (bytes != null) {

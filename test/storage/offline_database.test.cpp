@@ -1,21 +1,21 @@
-#include <mbgl/test/util.hpp>
-#include <mbgl/test/fixture_log_observer.hpp>
-#include <mbgl/test/sqlite3_test_fs.hpp>
+#include <mln/test/util.hpp>
+#include <mln/test/fixture_log_observer.hpp>
+#include <mln/test/sqlite3_test_fs.hpp>
 
-#include <mbgl/storage/offline_database.hpp>
-#include <mbgl/storage/resource.hpp>
-#include <mbgl/storage/response.hpp>
-#include <mbgl/util/io.hpp>
-#include <mbgl/util/string.hpp>
+#include <mln/storage/offline_database.hpp>
+#include <mln/storage/resource.hpp>
+#include <mln/storage/response.hpp>
+#include <mln/util/io.hpp>
+#include <mln/util/string.hpp>
 
-#include <mbgl/storage/sqlite3.hpp>
-#include <mbgl/util/variant.hpp>
+#include <mln/storage/sqlite3.hpp>
+#include <mln/util/variant.hpp>
 #include <thread>
 #include <random>
 #include <variant>
 
 using namespace std::literals::string_literals;
-using namespace mbgl;
+using namespace mln;
 using mapbox::sqlite::ResultCode;
 
 static constexpr const char* filename = "test/fixtures/offline_database/offline.db";
@@ -159,7 +159,7 @@ TEST(OfflineDatabase, TEST_REQUIRES_WRITE(CreateFail)) {
     }
 
     // Now, we're "freeing up" some space on the disk, and try to insert and
-    // query again. This time, we should be opening the datbase, creating the
+    // query again. This time, we should be opening the database, creating the
     // schema, and writing the data so that we can retrieve it again.
     fs.allowFileCreate(true);
     for (const auto& res : {fixture::resource, fixture::tile}) {
@@ -396,6 +396,22 @@ TEST(OfflineDatabase, PutTile) {
     EXPECT_EQ(0u, log.uncheckedCount());
 }
 
+// Cache-key encoding for byte-range sources (eg. PMTiles). The range is appended
+// to the URL so distinct ranges occupy distinct cache rows under the resources
+// table's UNIQUE(url) constraint.
+TEST(OfflineDatabase, CacheKey) {
+    Resource bare{Resource::Kind::Source, "https://example.com/x.pmtiles"};
+    EXPECT_EQ("https://example.com/x.pmtiles", OfflineDatabase::cacheKey(bare));
+
+    Resource ranged{Resource::Kind::Source, "https://example.com/x.pmtiles"};
+    ranged.dataRange = std::make_pair<uint64_t, uint64_t>(0, 126);
+    EXPECT_EQ("https://example.com/x.pmtiles?_mlnRange=0-126", OfflineDatabase::cacheKey(ranged));
+
+    Resource rangedWithQuery{Resource::Kind::Source, "https://example.com/x.pmtiles?token=abc"};
+    rangedWithQuery.dataRange = std::make_pair<uint64_t, uint64_t>(200, 399);
+    EXPECT_EQ("https://example.com/x.pmtiles?token=abc&_mlnRange=200-399", OfflineDatabase::cacheKey(rangedWithQuery));
+}
+
 TEST(OfflineDatabase, PutResourceNoContent) {
     FixtureLog log;
     OfflineDatabase db(":memory:", fixture::tileServerOptions);
@@ -468,7 +484,7 @@ TEST(OfflineDatabase, UpdateMetadata) {
     ASSERT_TRUE(region);
 
     OfflineRegionMetadata newmetadata{{4, 5, 6}};
-    db.updateMetadata(region->getID(), newmetadata);
+    ASSERT_TRUE(db.updateMetadata(region->getID(), newmetadata));
     auto newRegion = db.getRegion(region->getID()).value();
     EXPECT_EQ(newRegion->getMetadata(), newmetadata);
 

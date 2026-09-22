@@ -3,7 +3,7 @@
 #import "MLNLoggingConfiguration_Private.h"
 #import "MLNMapView+Metal.h"
 
-#import <mbgl/mtl/renderable_resource.hpp>
+#import <mln/mtl/renderable_resource.hpp>
 
 #import <Metal/Metal.h>
 #import <MetalKit/MetalKit.h>
@@ -34,7 +34,7 @@
 
 @end
 
-class MLNMapViewMetalRenderableResource final : public mbgl::mtl::RenderableResource {
+class MLNMapViewMetalRenderableResource final : public mln::mtl::RenderableResource {
 public:
   MLNMapViewMetalRenderableResource(MLNMapViewMetalImpl& backend_)
       : backend(backend_), delegate([[MLNMapViewImplDelegate alloc] initWithImpl:&backend]) {}
@@ -50,18 +50,18 @@ public:
     }
   }
 
-  const mbgl::mtl::RendererBackend& getBackend() const override { return backend; }
+  const mln::mtl::RendererBackend& getBackend() const override { return backend; }
 
-  const mbgl::mtl::MTLCommandBufferPtr& getCommandBuffer() const override {
+  const mln::mtl::MTLCommandBufferPtr& getCommandBuffer() const override {
     return commandBufferPtr;
   }
 
-  virtual mbgl::mtl::MTLBlitPassDescriptorPtr getUploadPassDescriptor() const override {
+  virtual mln::mtl::MTLBlitPassDescriptorPtr getUploadPassDescriptor() const override {
     // Create from render pass descriptor?
     return NS::TransferPtr(MTL::BlitPassDescriptor::alloc()->init());
   }
 
-  const mbgl::mtl::MTLRenderPassDescriptorPtr& getRenderPassDescriptor() const override {
+  const mln::mtl::MTLRenderPassDescriptorPtr& getRenderPassDescriptor() const override {
     if (!cachedRenderPassDescriptor) {
       auto* mtlDesc = mtlView.currentRenderPassDescriptor;
       cachedRenderPassDescriptor = NS::RetainPtr((__bridge MTL::RenderPassDescriptor*)mtlDesc);
@@ -88,7 +88,7 @@ public:
     cachedRenderPassDescriptor.reset();
   }
 
-  mbgl::Size framebufferSize() {
+  mln::Size framebufferSize() {
     assert(mtlView);
     return {static_cast<uint32_t>(mtlView.drawableSize.width),
             static_cast<uint32_t>(mtlView.drawableSize.height)};
@@ -96,8 +96,8 @@ public:
 
 private:
   MLNMapViewMetalImpl& backend;
-  mbgl::mtl::MTLCommandBufferPtr commandBufferPtr;
-  mutable mbgl::mtl::MTLRenderPassDescriptorPtr cachedRenderPassDescriptor;
+  mln::mtl::MTLCommandBufferPtr commandBufferPtr;
+  mutable mln::mtl::MTLRenderPassDescriptorPtr cachedRenderPassDescriptor;
 
 public:
   MLNMapViewImplDelegate* delegate = nil;
@@ -106,6 +106,11 @@ public:
   id<MTLCommandQueue> commandQueue;
   bool presentsWithTransaction = false;
 
+  // Cached last-applied values comparing against MTKView's reflected state round-trips
+  // through UIKit and can defeat the no-op guard under non-integer scale factors.
+  CGFloat lastAppliedScaleFactor = 0;
+  CGSize lastAppliedDrawableSize = CGSizeZero;
+
   // We count how often the context was activated/deactivated so that we can truly deactivate it
   // after the activation count drops to 0.
   NSUInteger activationCount = 0;
@@ -113,8 +118,8 @@ public:
 
 MLNMapViewMetalImpl::MLNMapViewMetalImpl(MLNMapView* nativeView_)
     : MLNMapViewImpl(nativeView_),
-      mbgl::mtl::RendererBackend(mbgl::gfx::ContextMode::Unique),
-      mbgl::gfx::Renderable({0, 0}, std::make_unique<MLNMapViewMetalRenderableResource>(*this)) {}
+      mln::mtl::RendererBackend(mln::gfx::ContextMode::Unique),
+      mln::gfx::Renderable({0, 0}, std::make_unique<MLNMapViewMetalRenderableResource>(*this)) {}
 
 MLNMapViewMetalImpl::~MLNMapViewMetalImpl() = default;
 
@@ -128,10 +133,8 @@ void MLNMapViewMetalImpl::setPresentsWithTransaction(const bool value) {
   auto& resource = getResource<MLNMapViewMetalRenderableResource>();
   resource.presentsWithTransaction = value;
 
-  if (@available(iOS 13.0, *)) {
-    if (CAMetalLayer* metalLayer = MLN_OBJC_DYNAMIC_CAST(resource.mtlView.layer, CAMetalLayer)) {
-      metalLayer.presentsWithTransaction = value;
-    }
+  if (CAMetalLayer* metalLayer = MLN_OBJC_DYNAMIC_CAST(resource.mtlView.layer, CAMetalLayer)) {
+    metalLayer.presentsWithTransaction = value;
   }
 }
 
@@ -161,6 +164,9 @@ void MLNMapViewMetalImpl::createView() {
   resource.mtlView.delegate = resource.delegate;
   resource.mtlView.autoresizingMask =
       UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+  // We own drawable sizing in layoutChanged(); disable MTKView's automatic recompute so
+  // setting contentScaleFactor cannot race with explicit drawableSize assignment.
+  resource.mtlView.autoResizeDrawable = NO;
   resource.mtlView.contentScaleFactor = scaleFactor;
   resource.mtlView.contentMode = UIViewContentModeCenter;
   resource.mtlView.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
@@ -168,10 +174,8 @@ void MLNMapViewMetalImpl::createView() {
   resource.mtlView.opaque = mapView.opaque;
   resource.mtlView.layer.opaque = mapView.opaque;
   resource.mtlView.enableSetNeedsDisplay = YES;
-  if (@available(iOS 13.0, *)) {
-    CAMetalLayer* metalLayer = MLN_OBJC_DYNAMIC_CAST(resource.mtlView.layer, CAMetalLayer);
-    metalLayer.presentsWithTransaction = resource.presentsWithTransaction;
-  }
+  CAMetalLayer* metalLayer = MLN_OBJC_DYNAMIC_CAST(resource.mtlView.layer, CAMetalLayer);
+  metalLayer.presentsWithTransaction = resource.presentsWithTransaction;
 
   [mapView insertSubview:resource.mtlView atIndex:0];
 }
@@ -200,32 +204,34 @@ void MLNMapViewMetalImpl::deactivate() {
   }
 }
 
-/// This function is called before we start rendering, when iOS invokes our rendering method.
-/// iOS already sets the correct framebuffer and viewport for us, so we need to update the
-/// context state with the anticipated values.
-void MLNMapViewMetalImpl::updateAssumedState() {
-  auto& resource = getResource<MLNMapViewMetalRenderableResource>();
-  assumeFramebufferBinding(ImplicitFramebufferBinding);
-  assumeViewport(0, 0, resource.framebufferSize());
-}
-
 UIImage* MLNMapViewMetalImpl::snapshot() {
   auto& resource = getResource<MLNMapViewMetalRenderableResource>();
   return nil;  // TODO: resource.mtlView.snapshot;
 }
 
 void MLNMapViewMetalImpl::layoutChanged() {
-  const auto scaleFactor = MLNEffectiveScaleFactorForView(mapView);
-  const auto screenSize = mapView.bounds.size;
-
+  // Fix: unconditionally rewriting contentScaleFactor/drawableSize every
+  // layout pass caused a feedback loop under iOS 26 Smart Display Zoom (non-integer scale).
+  // Also skip pre-layout/detached passes — MLNEffectiveScaleFactorForView falls back to
+  // mainScreen without a window, wrong for CarPlay.
   auto& resource = getResource<MLNMapViewMetalRenderableResource>();
+  const auto viewSize = mapView.bounds.size;
+  if (!resource.mtlView || viewSize.width <= 0 || viewSize.height <= 0 || !mapView.window) {
+    return;
+  }
 
-  resource.mtlView.contentScaleFactor = scaleFactor;
-  resource.mtlView.drawableSize =
-      CGSizeMake(screenSize.width * scaleFactor, screenSize.height * scaleFactor);
+  const auto scaleFactor = MLNEffectiveScaleFactorForView(mapView);
+  const CGSize target = CGSizeMake(std::round(viewSize.width * scaleFactor),
+                                   std::round(viewSize.height * scaleFactor));
 
-  size = {static_cast<uint32_t>(resource.mtlView.drawableSize.width),
-          static_cast<uint32_t>(resource.mtlView.drawableSize.height)};
+  if (scaleFactor != resource.lastAppliedScaleFactor) {
+    resource.mtlView.contentScaleFactor = resource.lastAppliedScaleFactor = scaleFactor;
+  }
+  if (!CGSizeEqualToSize(target, resource.lastAppliedDrawableSize)) {
+    resource.mtlView.drawableSize = resource.lastAppliedDrawableSize = target;
+  }
+
+  setRenderableSize({static_cast<uint32_t>(target.width), static_cast<uint32_t>(target.height)});
 }
 
 MLNBackendResource* MLNMapViewMetalImpl::getObject() {
