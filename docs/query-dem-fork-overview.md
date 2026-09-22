@@ -17,7 +17,7 @@ The DEM port is split into separate commits for:
 1. core renderer + Android API
 2. iOS API
 3. DEM regression tests
-4. fork documentation + local iOS XCFramework/dSYM build tooling
+4. fork documentation + local iOS/Android build tooling
 
 The old temporary Vulkan workaround from `tmp/query-dem` is intentionally **not** included.
 
@@ -231,15 +231,77 @@ Not covered:
    - current upstream has substantial Vulkan lifecycle changes
    - the workaround should only be reconsidered if the original crash still reproduces
 
-## Local iOS XCFramework + dSYM build helper
+## Local build helpers
 
-The branch also carries:
+The branch carries local build helpers for both iOS and Android. This tooling is separate from the DEM query runtime feature.
 
-- `scripts/build-ios-local.sh`
+### iOS
 
-This helper builds the Metal iOS XCFramework with Bazel, retrieves the device dSYM, repackages the XCFramework with `xcodebuild -create-xcframework`, and validates that the framework binary and dSYM UUIDs match.
+`scripts/build-ios-local.sh` builds the Metal iOS XCFramework with Bazel, retrieves the device dSYM, repackages the XCFramework with `xcodebuild -create-xcframework`, validates that the framework binary and dSYM UUIDs match, and installs the result into the local Swift package.
 
-This tooling is separate from the DEM query runtime feature.
+Default local package path:
+
+```bash
+scripts/build-ios-local.sh
+```
+
+Custom package path:
+
+```bash
+scripts/build-ios-local.sh --package-dir ../maplibre-ios-local
+```
+
+### Android
+
+`scripts/build-android-local.sh` builds the Android SDK and publishes it to the local Maven repository.
+
+Defaults:
+
+- renderer: Vulkan
+- build type: release
+- ABIs: `armeabi-v7a`, `arm64-v8a`, `x86`, and `x86_64`
+- Maven repository: `~/.m2/repository`
+- artifact: `org.maplibre.gl:android-sdk-vulkan:13.6.1`
+
+Default Vulkan release build:
+
+```bash
+scripts/build-android-local.sh
+```
+
+Other examples:
+
+```bash
+scripts/build-android-local.sh --renderer opengl
+scripts/build-android-local.sh --renderer multiBackend
+scripts/build-android-local.sh --build-type debug
+scripts/build-android-local.sh --abis arm64-v8a
+scripts/build-android-local.sh --abis "arm64-v8a,x86_64"
+```
+
+Renderer artifacts:
+
+- Vulkan: `org.maplibre.gl:android-sdk-vulkan:<version>`
+- OpenGL ES: `org.maplibre.gl:android-sdk-opengl:<version>`
+- Vulkan + OpenGL ES: `org.maplibre.gl:android-sdk-vulkan-opengl:<version>`
+- debug publications add the `-debug` artifact suffix
+
+The script uses the existing Gradle Maven publication setup but suppresses the normal Maven Central signing configuration for local builds. It verifies that both the AAR and POM were written to the local repository.
+
+The consuming Android project should resolve the local repository before Maven Central:
+
+```kotlin
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+dependencies {
+    implementation("org.maplibre.gl:android-sdk-vulkan:13.6.1")
+}
+```
+
+When rebuilding the same version repeatedly, use `--refresh-dependencies` in the consuming project if Gradle continues using a cached artifact.
 
 ## Validation status
 
@@ -255,4 +317,4 @@ This tooling is separate from the DEM query runtime feature.
 3. `platform/android/MapLibreAndroid/src/main/java/org/maplibre/android/maps/MapLibreMap.java`
 4. `platform/ios/src/MLNMapView.h`
 5. `test/style/source.test.cpp`
-6. `scripts/build-ios-local.sh`
+6. `scripts/build-ios-local.sh`\n7. `scripts/build-android-local.sh`
