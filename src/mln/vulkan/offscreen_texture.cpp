@@ -35,7 +35,10 @@ public:
         renderPass.reset();
         colorTexture.reset();
 
-        backend.getContext().renderingStats().numFrameBuffers--;
+        // Temporary workaround: avoid Vulkan crash seen during offscreen texture teardown.
+        // This keeps framebuffer stats inaccurate, but matches the old tmp/query-dem fix.
+        // TODO: investigate the underlying lifetime / destruction issue properly.
+        // backend.getContext().renderingStats().numFrameBuffers--;
     }
 
     void bind() override {
