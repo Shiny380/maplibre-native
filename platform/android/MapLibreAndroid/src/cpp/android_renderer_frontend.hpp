@@ -52,7 +52,7 @@ public:
     std::vector<Feature> queryRenderedFeatures(const ScreenCoordinate&, const RenderedQueryOptions&) const;
     std::vector<Feature> queryRenderedFeatures(const ScreenBox&, const RenderedQueryOptions&) const;
     std::vector<Feature> querySourceFeatures(const std::string& sourceID, const SourceQueryOptions&) const;
-    std::optional<double> queryRasterDEMElevation(const std::string& sourceID, const LatLng&) const;
+    std::optional<double> queryRasterDEMElevation(const std::string& sourceID, const mln::LatLng&) const;
     void setFeatureState(const std::string& sourceID,
                          const std::optional<std::string>& sourceLayerID,
                          const std::string& featureID,
